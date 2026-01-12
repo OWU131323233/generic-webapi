@@ -16,12 +16,11 @@ const MODEL = 'gpt-4o-mini';  // OpenAI: 'gpt-4o-mini', Gemini: 'gemini-2.5-flas
 let promptTemplate;
 try {
     promptTemplate = fs.readFileSync('prompt.md', 'utf8');
-} catch (error) { 
+} catch (error) {
     console.error('Error reading prompt.md:', error);
     process.exit(1);
 }
 
-//const OPENAI_API_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const OPENAI_API_ENDPOINT = "https://openai-api-proxy-746164391621.us-west1.run.app";
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 

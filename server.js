@@ -16,7 +16,7 @@ const MODEL = 'gpt-4o-mini';  // OpenAI: 'gpt-4o-mini', Gemini: 'gemini-2.5-flas
 let promptTemplate;
 try {
     promptTemplate = fs.readFileSync('prompt.md', 'utf8');
-} catch (error) {
+} catch (error) { 
     console.error('Error reading prompt.md:', error);
     process.exit(1);
 }

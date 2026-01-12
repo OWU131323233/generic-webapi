@@ -1,124 +1,111 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>AIおしゃべり占いルーム</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="style.css">
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #f5f5f5;
-      margin: 0;
-      padding: 20px;
-    }
-
-    h1 {
-      text-align: center;
-    }
-
-    .input-area {
-      max-width: 600px;
-      margin: 0 auto 20px;
-      background: #fff;
-      padding: 20px;
-      border-radius: 10px;
-    }
-
-    textarea {
-      width: 100%;
-      height: 80px;
-      font-size: 16px;
-    }
-
-    button {
-      margin-top: 10px;
-      padding: 10px 20px;
-      font-size: 16px;
-    }
-
-    .ai-area {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 15px;
-      margin-top: 20px;
-    }
-
-    .ai-box {
-      background: #fff;
-      border-radius: 10px;
-      padding: 15px;
-    }
-
-    .ai-title {
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
-
-    .ai-message {
-      white-space: pre-wrap;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>MBTI診断</title>
+<script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
 </head>
+
 <body>
+<h1>MBTI性格診断</h1>
 
-<h1>AIおしゃべり占いルーム</h1>
+<div id="questions"></div>
+<button onclick="diagnose()">診断する</button>
 
-<div class="input-area">
-  <p>今の悩みを入力してください</p>
-  <textarea id="userInput" placeholder="例：将来が不安です"></textarea>
-  <button onclick="sendFortune()">占ってもらう</button>
-</div>
+<hr>
 
-<div class="ai-area">
-  <div class="ai-box">
-    <div class="ai-title">💖 恋愛・人間関係AI</div>
-    <div class="ai-message" id="loveAI">---</div>
-  </div>
+<div id="result"></div>
 
-  <div class="ai-box">
-    <div class="ai-title">📚 勉強・将来AI</div>
-    <div class="ai-message" id="studyAI">---</div>
-  </div>
+<h2>スマホを傾けてAI相談</h2>
+<p>左：共感AI ／ 右：現実AI ／ 前：厳しめAI</p>
 
-  <div class="ai-box">
-    <div class="ai-title">🌱 メンタルケアAI</div>
-    <div class="ai-message" id="mentalAI">---</div>
-  </div>
-</div>
+<div id="chat"></div>
 
 <script>
-async function sendFortune() {
-  const text = document.getElementById("userInput").value.trim();
-  if (!text) {
-    alert("悩みを入力してください");
-    return;
-  }
+const socket = io();
+socket.emit("join", "mbti");
 
-  // 3人格AIを同時に呼び出す
-  const roles = [
-    { id: "loveAI", role: "love" },
-    { id: "studyAI", role: "study" },
-    { id: "mentalAI", role: "mental" }
-  ];
+let currentAI = "";
+let mbtiType = "";
 
-  roles.forEach(async (ai) => {
-    document.getElementById(ai.id).textContent = "考え中...";
+socket.on("sensor", (data) => {
+  const g = parseFloat(data.g);
+  const a = parseFloat(data.a);
 
-    const res = await fetch("/api/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        role: ai.role,
-        message: text
-      })
-    });
+  if (g < -15) consult("empathetic");
+  else if (g > 15) consult("realistic");
+  else if (a > 15) consult("strict");
+});
 
-    const data = await res.json();
-    document.getElementById(ai.id).textContent = data.reply;
+const questions = [
+  "初対面でも話しかけられる",
+  "一人の時間が好き",
+  "計画を立てるのが好き",
+  "直感を信じる",
+  "人の感情に影響されやすい",
+  "論理的に考える",
+  "柔軟に対応できる",
+  "決断が早い",
+  "人に合わせがち",
+  "将来をよく考える"
+];
+
+const qDiv = document.getElementById("questions");
+questions.forEach((q, i) => {
+  qDiv.innerHTML += `
+    <p>${q}</p>
+    <label><input type="radio" name="q${i}" value="yes">はい</label>
+    <label><input type="radio" name="q${i}" value="no">いいえ</label>
+  `;
+});
+
+async function diagnose() {
+  const answers = questions.map((_, i) => {
+    const v = document.querySelector(`input[name="q${i}"]:checked`);
+    return v ? v.value : "no";
   });
+
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      message: `以下の回答からMBTIを1つ決定してください。\n${answers.join(",")}`
+    })
+  });
+
+  const data = await res.json();
+  const result = JSON.parse(data.choices[0].message.content);
+  mbtiType = result.mbti;
+
+  document.getElementById("result").innerHTML = `
+    <h2>${result.mbti}</h2>
+    <p>${result.description}</p>
+    <p>${result.advice}</p>
+  `;
+}
+
+async function consult(type) {
+  if (type === currentAI || !mbtiType) return;
+  currentAI = type;
+
+  const roles = {
+    empathetic: "優しく共感する相談相手",
+    realistic: "現実的で冷静なアドバイザー",
+    strict: "少し厳しいが的確な助言者"
+  };
+
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      message: `MBTI:${mbtiType}\nあなたは${roles[type]}です。\n悩み: 人間関係に疲れています`
+    })
+  });
+
+  const data = await res.json();
+  document.getElementById("chat").innerText =
+    `【${roles[type]}】\n` + data.choices[0].message.content;
 }
 </script>
-
 </body>
 </html>

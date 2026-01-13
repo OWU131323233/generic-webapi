@@ -1,168 +1,79 @@
-// server.js
 const express = require('express');
 const fs = require('fs');
-const http = require('http');
-const { Server } = require('socket.io');
 require('dotenv').config();
-const fetch = require('node-fetch'); // Node.js 18未満の場合必要
-
 const app = express();
+const http = require('http');
 const server = http.createServer(app);
+const { Server } = require("socket.io");
 const io = new Server(server);
 
-const PORT = process.env.PORT || 8080;
-
-// ===============================
-// 設定
-// ===============================
-const PROVIDER = 'openai';
-const MODEL = 'gpt-4o-mini';
-
-// ===============================
-// prompt.md 読み込み（MBTI診断用）
-// ===============================
-const basePrompt = fs.readFileSync('prompt.md', 'utf8');
-
-// ===============================
-// AIキャラ定義（multiple-ai-chat用）
-// ===============================
-const PERSONAS = {
-  normal: `
-あなたは丁寧で分かりやすいAIです。
-ユーザーの話を整理し、前向きな回答をしてください。
-`,
-  friendly: `
-あなたはとても優しく、友達のようなAIです。
-共感を重視し、安心させる言葉を多く使ってください。
-`,
-  strict: `
-あなたは少し厳しいが的確なアドバイスをするAIです。
-甘やかさず、改善点をはっきり伝えてください。
-`,
-  counselor: `
-あなたはカウンセラーAIです。
-質問を交えながら、ユーザーの考えを深めてください。
-`
-};
-
-// ===============================
-// ミドルウェア
-// ===============================
 app.use(express.json());
 app.use(express.static('public'));
 
-// ===============================
-// MBTI診断用 API
-// ===============================
-app.post('/api/', async (req, res) => {
-  try {
-    const { prompt, persona = 'normal' } = req.body;
+const PROVIDER = 'openai';
+const MODEL = 'gpt-4o-mini';
+const basePrompt = fs.readFileSync('prompt.md','utf8');
 
-    const systemPrompt = basePrompt + '\n\n' + (PERSONAS[persona] || PERSONAS.normal);
+const PERSONAS={
+  friendly:"あなたはとても優しく、友達のようなAIです。共感を重視し、安心させる言葉を多く使ってください。",
+  strict:"あなたは少し厳しいが的確なアドバイスをするAIです。甘やかさず、改善点をはっきり伝えてください。",
+  counselor:"あなたはカウンセラーAIです。質問を交えながら、ユーザーの考えを深めてください。"
+};
 
-    const finalPrompt = `【ユーザーの入力】\n${prompt}`;
-
-    const result = await callOpenAI(systemPrompt, finalPrompt);
-
-    res.json({ data: result });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+/* ===== MBTI診断用API ===== */
+app.post('/api/',async(req,res)=>{
+  try{
+    const {prompt}=req.body;
+    const systemPrompt = basePrompt;
+    const finalPrompt=`【ユーザーの回答】\n${prompt}`;
+    const result=await callOpenAI(systemPrompt,finalPrompt);
+    res.json({data:result});
+  }catch(err){
+    console.error(err);
+    res.status(500).json({error:err.message});
   }
 });
 
-// ===============================
-// OpenAI 呼び出し関数
-// ===============================
-async function callOpenAI(systemPrompt, userPrompt) {
+async function callOpenAI(systemPrompt,userPrompt){
   const apiKey = process.env.OPENAI_API_KEY;
-
   const response = await fetch(
     'https://openai-api-proxy-746164391621.us-west1.run.app',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        response_format: { type: 'json_object' }
-      })
-    }
-  );
-
-  const data = await response.json();
+    {method:'POST',
+     headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
+     body:JSON.stringify({model:MODEL,messages:[{role:'system',content:systemPrompt},{role:'user',content:userPrompt}],response_format:{type:'json_object'}})
+    });
+  const data=await response.json();
   return JSON.parse(data.choices[0].message.content);
 }
 
-// ===============================
-// Socket.IO チャット機能
-// ===============================
-io.on('connection', (socket) => {
-  console.log('A user connected');
-
-  // クライアントが接続時に送るIDを保持
-  socket.on('user connected', (clientId) => {
-    socket.clientId = clientId;
-    console.log(`${clientId} connected`);
-
-    // 接続したクライアントに挨拶
-    socket.emit('welcome', clientId);
-
-    // 他クライアントに参加通知
-    socket.broadcast.emit('user joined', clientId);
+/* ===== Socket.IO チャット ===== */
+io.on('connection',socket=>{
+  socket.on('user connected',id=>{
+    socket.clientId=id;
+    socket.emit('welcome',id);
   });
 
-  // クライアント切断
-  socket.on('disconnect', () => {
-    if (socket.clientId) {
-      console.log(`${socket.clientId} disconnected`);
-      io.emit('user left', socket.clientId);
-    }
+  socket.on('chat message',async data=>{
+    // AIが返信する
+    const {id,msg,persona,mbti}=data;
+    // broadcast user msg
+    io.emit('chat message',{id,msg});
+
+    // AI生成
+    const systemPrompt=basePrompt + "\n\n" + (PERSONAS[persona]||PERSONAS.friendly);
+    const userPrompt=`MBTI:${mbti}\nユーザー発言:${msg}\nAIとして返答してください。`;
+    const aiData=await callOpenAI(systemPrompt,userPrompt);
+    io.emit('chat message',{id:'AI-'+persona,msg:aiData.description||aiData.advice||'はい'});
   });
 
-  // チャットメッセージ受信
-  socket.on('chat message', async (msg) => {
-    // まず全員に送信
-    io.emit('chat message', msg);
-
-    // AIからの返信かどうか判断（IDが AI- で始まる場合）
-    if (msg.id.startsWith('AI-')) {
-      // 再帰的なAI返信は任意で制御可能
-      return;
-    }
-
-    // ここでAI応答生成も可能
-    // 例：AIキャラクターに応じて応答を生成する
-    if (msg.aiPersona) {
-      try {
-        const systemPrompt = PERSONAS[msg.aiPersona] || PERSONAS.normal;
-        const userPrompt = msg.msg;
-
-        const aiResult = await callOpenAI(systemPrompt, userPrompt);
-
-        const aiMsg = {
-          id: 'AI-' + Math.random().toString(36).substring(2, 10),
-          msg: aiResult.description || aiResult.advice || 'わかりません'
-        };
-
-        io.emit('chat message', aiMsg);
-      } catch (err) {
-        console.error('AI返信生成エラー', err);
-      }
-    }
+  socket.on('disconnect',()=>{
+    if(socket.clientId) io.emit('user left',socket.clientId);
   });
 });
 
-// ===============================
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+server.listen(8080,()=>console.log("Server running on http://localhost:8080"));
+
+
 
 
 // const express = require('express');

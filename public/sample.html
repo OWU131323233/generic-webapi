@@ -1,111 +1,177 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>MBTI診断</title>
-<script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
+  <meta charset="UTF-8" />
+  <title>MBTI診断</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f7f7f7;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .question {
+      background: #fff;
+      padding: 16px;
+      margin-bottom: 16px;
+      border-radius: 10px;
+    }
+
+    .answer-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    button.answer {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #eee;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button.answer.selected {
+      background: #ff9fbf;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    #diagnoseBtn {
+      width: 100%;
+      margin-top: 30px;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: #ff5f9e;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    #screen-result {
+      display: none;
+      text-align: center;
+    }
+
+    #result-card {
+      background: #fff;
+      padding: 30px;
+      border-radius: 16px;
+      margin-top: 40px;
+    }
+
+    #mbtiType {
+      font-size: 32px;
+      color: #ff5f9e;
+    }
+
+    #restartBtn {
+      margin-top: 30px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      background: #ccc;
+      cursor: pointer;
+    }
+  </style>
 </head>
-
 <body>
-<h1>MBTI性格診断</h1>
 
-<div id="questions"></div>
-<button onclick="diagnose()">診断する</button>
+<!-- ================= 診断画面 ================= -->
+<div id="screen-question">
+  <h1>MBTI性格診断</h1>
+  <div id="questions"></div>
+  <button id="diagnoseBtn">診断する</button>
+</div>
 
-<hr>
-
-<div id="result"></div>
-
-<h2>スマホを傾けてAI相談</h2>
-<p>左：共感AI ／ 右：現実AI ／ 前：厳しめAI</p>
-
-<div id="chat"></div>
+<!-- ================= 結果画面 ================= -->
+<div id="screen-result">
+  <h1>診断結果</h1>
+  <div id="result-card">
+    <h2 id="mbtiType"></h2>
+    <p id="mbtiDesc"></p>
+  </div>
+  <button id="restartBtn">もう一度診断する</button>
+</div>
 
 <script>
-const socket = io();
-socket.emit("join", "mbti");
-
-let currentAI = "";
-let mbtiType = "";
-
-socket.on("sensor", (data) => {
-  const g = parseFloat(data.g);
-  const a = parseFloat(data.a);
-
-  if (g < -15) consult("empathetic");
-  else if (g > 15) consult("realistic");
-  else if (a > 15) consult("strict");
-});
-
 const questions = [
-  "初対面でも話しかけられる",
-  "一人の時間が好き",
+  "初対面の人と話すのは楽しい",
   "計画を立てるのが好き",
-  "直感を信じる",
-  "人の感情に影響されやすい",
-  "論理的に考える",
-  "柔軟に対応できる",
-  "決断が早い",
-  "人に合わせがち",
-  "将来をよく考える"
+  "一人の時間は必要不可欠だ",
+  "論理より感情を大切にする",
+  "新しいアイデアを考えるのが好き",
+  "締切は守るタイプだ",
+  "人の気持ちにすぐ気づく",
+  "即断即決が得意だ"
 ];
 
-const qDiv = document.getElementById("questions");
+const answers = {};
+const container = document.getElementById("questions");
+
 questions.forEach((q, i) => {
-  qDiv.innerHTML += `
+  const div = document.createElement("div");
+  div.className = "question";
+  div.innerHTML = `
     <p>${q}</p>
-    <label><input type="radio" name="q${i}" value="yes">はい</label>
-    <label><input type="radio" name="q${i}" value="no">いいえ</label>
+    <div class="answer-buttons">
+      <button class="answer" data-q="${i}" data-v="yes">Yes</button>
+      <button class="answer" data-q="${i}" data-v="no">No</button>
+    </div>
   `;
+  container.appendChild(div);
 });
 
-async function diagnose() {
-  const answers = questions.map((_, i) => {
-    const v = document.querySelector(`input[name="q${i}"]:checked`);
-    return v ? v.value : "no";
-  });
+container.addEventListener("click", (e) => {
+  if (!e.target.classList.contains("answer")) return;
 
-  const res = await fetch("/api/chat", {
+  const qIndex = e.target.dataset.q;
+  const value = e.target.dataset.v;
+  answers[qIndex] = value;
+
+  document
+    .querySelectorAll(`button.answer[data-q="${qIndex}"]`)
+    .forEach(btn => btn.classList.remove("selected"));
+
+  e.target.classList.add("selected");
+});
+
+document.getElementById("diagnoseBtn").onclick = () => {
+  const summary = questions.map((q, i) =>
+    `${q}：${answers[i] || "未回答"}`
+  ).join("\n");
+
+  fetch("/api/", {
     method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      message: `以下の回答からMBTIを1つ決定してください。\n${answers.join(",")}`
-    })
-  });
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: summary })
+  })
+  .then(res => res.json())
+  .then(data => {
+    const result = data.data;
 
-  const data = await res.json();
-  const result = JSON.parse(data.choices[0].message.content);
-  mbtiType = result.mbti;
+    document.getElementById("mbtiType").textContent = result.mbti;
+    document.getElementById("mbtiDesc").textContent =
+      result.description + "（アドバイス：" + result.advice + "）";
 
-  document.getElementById("result").innerHTML = `
-    <h2>${result.mbti}</h2>
-    <p>${result.description}</p>
-    <p>${result.advice}</p>
-  `;
-}
+    // ★ 画面切り替え
+    document.getElementById("screen-question").style.display = "none";
+    document.getElementById("screen-result").style.display = "block";
+  })
+  .catch(() => alert("診断に失敗しました"));
+};
 
-async function consult(type) {
-  if (type === currentAI || !mbtiType) return;
-  currentAI = type;
-
-  const roles = {
-    empathetic: "優しく共感する相談相手",
-    realistic: "現実的で冷静なアドバイザー",
-    strict: "少し厳しいが的確な助言者"
-  };
-
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      message: `MBTI:${mbtiType}\nあなたは${roles[type]}です。\n悩み: 人間関係に疲れています`
-    })
-  });
-
-  const data = await res.json();
-  document.getElementById("chat").innerText =
-    `【${roles[type]}】\n` + data.choices[0].message.content;
-}
+document.getElementById("restartBtn").onclick = () => {
+  location.reload();
+};
 </script>
+
 </body>
 </html>

@@ -2,17 +2,17 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>気分フラワー🌸</title>
+<title>気分診断🌼</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="flower.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 </head>
 
 <body>
-<h1>気分フラワー🌸</h1>
+<h1>気分診断🌼</h1>
 
 <div id="quiz"></div>
-<button id="nextBtn" onclick="next()">次へ</button>
+<button id="nextBtn" onclick="next()" style="display:none">次へ</button>
 <div id="canvas-holder"></div>
 
 <script>
@@ -29,8 +29,32 @@ const questions = [
 
 let qIndex = 0;
 let answers = [];
+let p5Instance = null; // p5インスタンス管理
+
+// ------------------- 最初のスタート画面 -------------------
+function showStartScreen() {
+  const box = document.getElementById("quiz");
+  box.innerHTML = `
+    <div class="option" onclick="startQuiz()">スタート</div>
+  `;
+  document.getElementById("nextBtn").style.display = "none";
+  // キャンバスをクリア
+  const canvasHolder = document.getElementById("canvas-holder");
+  canvasHolder.innerHTML = "";
+  if (p5Instance) {
+    p5Instance.remove();
+    p5Instance = null;
+  }
+}
 
 // ------------------- クイズ表示 -------------------
+function startQuiz() {
+  qIndex = 0;
+  answers = [];
+  document.getElementById("nextBtn").style.display = "inline-block";
+  showQuestion();
+}
+
 function showQuestion() {
   const box = document.getElementById("quiz");
   box.innerHTML = `<h2>${questions[qIndex].q}</h2>`;
@@ -72,7 +96,7 @@ async function diagnose() {
   const flower = data.flower;
 
   // ------------------- 3D花描画 -------------------
-  new p5(p => {
+  p5Instance = new p5(p => {
     p.setup = () => {
       p.createCanvas(400, 400, p.WEBGL);
       p.loop();
@@ -117,11 +141,15 @@ async function diagnose() {
     };
   }, "canvas-holder");
 
-  quizBox.innerHTML = "<h2>あなたの花です🌸</h2>";
+  // ------------------- 結果表示 & リスタート -------------------
+  quizBox.innerHTML = `
+    <h2>あなたの花です🌸</h2>
+    <div class="option" onclick="showStartScreen()">もう一度診断する</div>
+  `;
 }
 
-// 初期表示
-showQuestion();
+// ------------------- 初期表示 -------------------
+showStartScreen();
 </script>
 </body>
 </html>

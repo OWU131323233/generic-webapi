@@ -1,79 +1,131 @@
 const express = require('express');
 const fs = require('fs');
 require('dotenv').config();
+
 const app = express();
-const http = require('http');
-const server = http.createServer(app);
-const { Server } = require("socket.io");
-const io = new Server(server);
+const PORT = 8080;
 
 app.use(express.json());
 app.use(express.static('public'));
 
-const PROVIDER = 'openai';
+// ===============================
+// 設定
+// ===============================
 const MODEL = 'gpt-4o-mini';
-const basePrompt = fs.readFileSync('prompt.md','utf8');
+const OPENAI_API_ENDPOINT =
+  'https://openai-api-proxy-746164391621.us-west1.run.app';
 
-const PERSONAS={
-  friendly:"あなたはとても優しく、友達のようなAIです。共感を重視し、安心させる言葉を多く使ってください。",
-  strict:"あなたは少し厳しいが的確なアドバイスをするAIです。甘やかさず、改善点をはっきり伝えてください。",
-  counselor:"あなたはカウンセラーAIです。質問を交えながら、ユーザーの考えを深めてください。"
-};
+// ===============================
+// prompt.md 読み込み
+// ===============================
+const systemPrompt = fs.readFileSync('prompt.md', 'utf8');
 
-/* ===== MBTI診断用API ===== */
-app.post('/api/',async(req,res)=>{
-  try{
-    const {prompt}=req.body;
-    const systemPrompt = basePrompt;
-    const finalPrompt=`【ユーザーの回答】\n${prompt}`;
-    const result=await callOpenAI(systemPrompt,finalPrompt);
-    res.json({data:result});
-  }catch(err){
-    console.error(err);
-    res.status(500).json({error:err.message});
+// ===============================
+// API
+// ===============================
+app.post('/api/', async (req, res) => {
+  try {
+    const { answers } = req.body;
+
+    const response = await fetch(OPENAI_API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: JSON.stringify(answers) }
+        ],
+        response_format: { type: 'json_object' },
+        max_completion_tokens: 500
+      })
+    });
+
+    const data = await response.json();
+    const result = JSON.parse(data.choices[0].message.content);
+
+    res.json(result);
+
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
-async function callOpenAI(systemPrompt,userPrompt){
-  const apiKey = process.env.OPENAI_API_KEY;
-  const response = await fetch(
-    'https://openai-api-proxy-746164391621.us-west1.run.app',
-    {method:'POST',
-     headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
-     body:JSON.stringify({model:MODEL,messages:[{role:'system',content:systemPrompt},{role:'user',content:userPrompt}],response_format:{type:'json_object'}})
-    });
-  const data=await response.json();
-  return JSON.parse(data.choices[0].message.content);
-}
-
-/* ===== Socket.IO チャット ===== */
-io.on('connection',socket=>{
-  socket.on('user connected',id=>{
-    socket.clientId=id;
-    socket.emit('welcome',id);
-  });
-
-  socket.on('chat message',async data=>{
-    // AIが返信する
-    const {id,msg,persona,mbti}=data;
-    // broadcast user msg
-    io.emit('chat message',{id,msg});
-
-    // AI生成
-    const systemPrompt=basePrompt + "\n\n" + (PERSONAS[persona]||PERSONAS.friendly);
-    const userPrompt=`MBTI:${mbti}\nユーザー発言:${msg}\nAIとして返答してください。`;
-    const aiData=await callOpenAI(systemPrompt,userPrompt);
-    io.emit('chat message',{id:'AI-'+persona,msg:aiData.description||aiData.advice||'はい'});
-  });
-
-  socket.on('disconnect',()=>{
-    if(socket.clientId) io.emit('user left',socket.clientId);
-  });
+// ===============================
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
 });
 
-server.listen(8080,()=>console.log("Server running on http://localhost:8080"));
 
+// import express from "express";
+// import fetch from "node-fetch";
+// import fs from "fs";
+// import path from "path";
 
+// const app = express();
+// const PORT = 3000;
+
+// app.use(express.json());
+// app.use(express.static("public"));
+
+// // system prompt（prompt.mdを読む）
+// const systemPrompt = fs.readFileSync("prompt.md", "utf-8");
+
+// // メモリ上で会話履歴を保持（※学習用ならOK）
+// let messages = [
+//   {
+//     role: "system",
+//     content: systemPrompt
+//   }
+// ];
+
+// app.post("/chat", async (req, res) => {
+//   const userMessage = req.body.message;
+
+//   // ユーザー発言を履歴に追加
+//   messages.push({
+//     role: "user",
+//     content: userMessage
+//   });
+  
+
+//   try {
+//     const response = await fetch("https://api.openai.com/v1/chat/completions", {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/json",
+//         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+//       },
+//       body: JSON.stringify({
+//         model: "gpt-4o-mini",
+//         messages: messages,
+//         temperature: 0.7
+//       })
+//     });
+
+//     const data = await response.json();
+//     const aiMessage = data.choices[0].message.content;
+
+//     // AI発言を履歴に追加
+//     messages.push({
+//       role: "assistant",
+//       content: aiMessage
+//     });
+
+//     res.json({ reply: aiMessage });
+
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: "LLMエラーが発生しました" });
+//   }
+// });
+
+// app.listen(PORT, () => {
+//   console.log(`Server running at http://localhost:${PORT}`);
+// });
 
 
 // const express = require('express');

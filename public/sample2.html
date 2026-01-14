@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>今日の気分フラワー</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+<style>
+body{ margin:0; background:#fff0f6; font-family:"Hiragino Maru Gothic ProN",sans-serif; text-align:center; }
+h1{ color:#ff6fa5; }
+#quiz{ max-width:400px; margin:20px auto; }
+.option{ background:white; margin:10px; padding:12px; border-radius:20px; cursor:pointer; border:2px solid #ffd6e7; }
+.option:hover{ background:#ffe3ef; }
+button{ padding:10px 24px; border:none; border-radius:25px; background:#ff6fa5; color:white; font-size:16px; }
+#canvas-holder{ width:400px; height:400px; margin:20px auto; }
+</style>
+</head>
+<body>
+
+<h1>今日の気分フラワー🌸</h1>
+<div id="quiz"></div>
+<button id="nextBtn" onclick="next()">次へ</button>
+<div id="canvas-holder"></div>
+
+<script>
+const questions = [
+ ["今日の予定は？",["余裕がある","ほどほど","忙しい","余裕がない"]],
+ ["朝の目覚めは？",["すっきり","普通","眠い","つらい"]],
+ ["今日の行動は？",["挑戦","いつも通り","控えめ","何もしたくない"]],
+ ["人との距離感は？",["たくさん","適度","最低限","一人がいい"]],
+ ["集中力は？",["高い","普通","低め","続かない"]],
+ ["生活リズムは？",["整っている","まあまあ","乱れ","かなり乱れ"]],
+ ["今日選ぶなら？",["外出","友だち","家","早く寝る"]]
+];
+
+let q = 0;
+let answers = [];
+
+function showQuestion(){
+  const box=document.getElementById("quiz");
+  box.innerHTML=`<h2>${questions[q][0]}</h2>`;
+  questions[q][1].forEach(a=>{
+    const d=document.createElement("div");
+    d.className="option";
+    d.innerText=a;
+    d.onclick=()=>answers[q]=a;
+    box.appendChild(d);
+  });
+}
+
+function next(){
+  if(!answers[q]) return alert("選択してください");
+  q++;
+  if(q<questions.length){
+    showQuestion();
+  }else{
+    diagnose();
+  }
+}
+
+async function diagnose(){
+  document.getElementById("quiz").innerHTML="診断中…🌼";
+  document.getElementById("nextBtn").style.display="none";
+
+  try {
+    const res = await fetch("/api/",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({answers})
+    });
+    const data = await res.json();
+    const flowerData = data.flower;
+
+    // flowerをローカル変数に閉じ込める
+    new p5((p)=>{
+      p.setup = ()=>{
+        p.createCanvas(400,400,p.WEBGL);
+      };
+      p.draw = ()=>{
+        if(!flowerData) return;
+
+        // 背景色
+        if(flowerData.background === "bright") p.background(255,240,245);
+        else if(flowerData.background === "soft") p.background(255,230,240);
+        else p.background(50);
+
+        p.rotateY(p.frameCount*0.003);
+        p.ambientLight(160);
+        p.directionalLight(255,255,255,0,-1,-1);
+
+        // stem
+        p.push();
+        p.fill(80,180,100);
+        p.translate(0,40,0);
+        p.rotateZ(flowerData.stemCurve);
+        p.cylinder(6,flowerData.stemHeight);
+        p.pop();
+
+        // petals
+        p.push();
+        p.translate(0,-flowerData.stemHeight/2+40,0);
+        p.fill(flowerData.color.r,flowerData.color.g,flowerData.color.b);
+        for(let i=0;i<flowerData.petalCount;i++){
+          p.rotateY(p.TWO_PI/flowerData.petalCount);
+          p.push();
+          p.translate(35,0,0);
+          p.rotateZ(-flowerData.petalOpen);
+          p.ellipsoid(28,10,40);
+          p.pop();
+        }
+        p.pop();
+      };
+    }, 'canvas-holder'); // ID文字列で指定
+  } catch(e){
+    alert("診断に失敗しました: "+e.message);
+  }
+}
+
+showQuestion();
+</script>
+</body>
+</html>

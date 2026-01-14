@@ -8,21 +8,15 @@ const PORT = 8080;
 app.use(express.json());
 app.use(express.static('public'));
 
-// ===============================
 // 設定
-// ===============================
 const MODEL = 'gpt-4o-mini';
 const OPENAI_API_ENDPOINT =
   'https://openai-api-proxy-746164391621.us-west1.run.app';
 
-// ===============================
 // prompt.md 読み込み
-// ===============================
 const systemPrompt = fs.readFileSync('prompt.md', 'utf8');
 
-// ===============================
 // API
-// ===============================
 app.post('/api/', async (req, res) => {
   try {
     const { answers } = req.body;
@@ -47,9 +41,7 @@ app.post('/api/', async (req, res) => {
     const data = await response.json();
     const mood = JSON.parse(data.choices[0].message.content).mood;
 
-    // ===============================
     // 気分 → 花パラメータ変換
-    // ===============================
     let flower;
 
     if (mood === 'positive') {
@@ -76,9 +68,7 @@ app.post('/api/', async (req, res) => {
   }
 });
 
-
-
-// ===============================
+// サーバ起動
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });

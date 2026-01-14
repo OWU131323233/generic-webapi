@@ -16,7 +16,7 @@
 <div id="canvas-holder"></div>
 
 <script>
-// ------------------- 質問・選択肢 -------------------
+//質問・選択肢
 const questions = [
   { q: "今日の予定は？", options: ["余裕がある","ほどほど","忙しい","余裕がない"] },
   { q: "朝の目覚めは？", options: ["すっきり","普通","眠い","つらい"] },
@@ -29,9 +29,9 @@ const questions = [
 
 let qIndex = 0;
 let answers = [];
-let p5Instance = null; // p5インスタンス管理
+let p5Instance = null;
 
-// ------------------- 最初のスタート画面 -------------------
+//スタート画面
 function showStartScreen() {
   const box = document.getElementById("quiz");
   box.innerHTML = `
@@ -47,7 +47,7 @@ function showStartScreen() {
   }
 }
 
-// ------------------- クイズ表示 -------------------
+//診断
 function startQuiz() {
   qIndex = 0;
   answers = [];
@@ -71,7 +71,7 @@ function showQuestion() {
   });
 }
 
-// ------------------- 次へボタン -------------------
+//次へボタン
 function next() {
   if (!answers[qIndex]) return alert("選択してください");
   qIndex++;
@@ -79,13 +79,13 @@ function next() {
   else diagnose();
 }
 
-// ------------------- 診断 & 3D花描画 -------------------
+//診断 & 3D花描画
 async function diagnose() {
   const quizBox = document.getElementById("quiz");
   quizBox.innerHTML = "<h2>診断中…🌼</h2>";
   document.getElementById("nextBtn").style.display = "none";
 
-  // サーバー経由で LLM 判断
+  //LLM　API
   const res = await fetch("/api/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -95,7 +95,7 @@ async function diagnose() {
   const data = await res.json();
   const flower = data.flower;
 
-  // ------------------- 3D花描画 -------------------
+  //3D花描画
   p5Instance = new p5(p => {
     p.setup = () => {
       p.createCanvas(400, 400, p.WEBGL);
@@ -141,14 +141,13 @@ async function diagnose() {
     };
   }, "canvas-holder");
 
-  // ------------------- 結果表示 & リスタート -------------------
+  //結果表示 & リスタート
   quizBox.innerHTML = `
     <h2>あなたの花です🌸</h2>
     <div class="option" onclick="showStartScreen()">もう一度診断する</div>
   `;
 }
 
-// ------------------- 初期表示 -------------------
 showStartScreen();
 </script>
 </body>
